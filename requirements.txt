@@ -1,0 +1,10 @@
+numpy
+pandas
+yfinance
+scikit-learn
+tqdm
+torch
+torch_geometric
+transformers
+datasets
+joblib
