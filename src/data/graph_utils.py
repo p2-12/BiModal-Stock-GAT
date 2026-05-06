@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import numpy as np
-import torch
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
+import torch
 
 
 def corr_graph_topk(returns_window, topk, use_abs=True, add_self_loops=True):

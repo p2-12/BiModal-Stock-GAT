@@ -1,18 +1,19 @@
 import os
-import time
 import random
+import time
+
 import numpy as np
 import pandas as pd
-
 from defeatbeta_api.data.ticker import Ticker
-from .price_features import (
-    engineer_features,
-    FEATURE_COLS,
-    future_log_return_curve,
-    compute_regime_features,
-)
-from .news import NewsConfig, NewsIndex, FinBERTEmbedder
+
 from .graph_dataset import GraphArrays
+from .news import FinBERTEmbedder, NewsConfig, NewsIndex
+from .price_features import (
+    FEATURE_COLS,
+    compute_regime_features,
+    engineer_features,
+    future_log_return_curve,
+)
 
 
 def _cache_piece_path(cache_path, tag):
@@ -33,7 +34,7 @@ def _defeatbeta_price_one(ticker, start, end, max_retries, base_sleep, jitter):
             if df is None or len(df) == 0:
                 raise RuntimeError("Empty price() result")
 
-            # expected columns per README example: symbol, report_date, open, close, high, low, volume :contentReference[oaicite:1]{index=1}
+            # expected columns: symbol, report_date, open, close, high, low, volume
             if "report_date" not in df.columns:
                 raise RuntimeError(f"Missing report_date for {ticker}")
 
@@ -93,7 +94,8 @@ def download_prices(
           * per-ticker caches to avoid refetching if only a few names change
 
     Notes:
-      - auto_adjust is kept only for signature compatibility (defeatbeta already serves adjusted-like series in many cases).
+      - auto_adjust is kept only for signature compatibility
+        (defeatbeta often serves adjusted-like series).
       - batching params are used only for pacing + cache grouping (not for a single bulk API call).
     """
     tickers = list(dict.fromkeys(tickers))
@@ -114,7 +116,7 @@ def download_prices(
     # pull per ticker (cached)
     per = {}
     batches = [tickers[i : i + batch_size] for i in range(0, len(tickers), batch_size)]
-    for bi, batch in enumerate(batches):
+    for _bi, batch in enumerate(batches):
         for t in batch:
             tcache = (
                 _cache_piece_path(cache_path, f"ticker.{t}") if cache_path is not None else None
@@ -251,7 +253,7 @@ def build_aligned_feature_panel(tickers, start, end, cache_prices=None):
 
     # 3) Align by intersection of dates to avoid NaN graphs
     common = None
-    for t, f in feats.items():
+    for _t, f in feats.items():
         idx = f.index
         common = idx if common is None else common.intersection(idx)
 
@@ -360,7 +362,7 @@ def build_graph_arrays(
                 keys.append((si, ti))
                 texts.append(txt)
 
-        for (si, ti), txt in zip(keys, texts):
+        for (si, ti), txt in zip(keys, texts, strict=False):
             mask_arr[si, ti] = txt != "[NO_NEWS]"
 
         embedder = FinBERTEmbedder(model_name=finbert_model)
