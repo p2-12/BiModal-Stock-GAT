@@ -24,7 +24,13 @@ def validate_ohlcv_bar(bar: OhlcvBar) -> OhlcvBar:
     validate_confidence(bar.confidence)
     if bar.high < max(bar.open, bar.close) or bar.low > min(bar.open, bar.close):
         raise ValueError("invalid OHLC bar: high/low bounds inconsistent")
-    return OhlcvBar(**{**bar.__dict__, "timestamp_utc": ensure_utc(bar.timestamp_utc), "ingestion_time_utc": ensure_utc(bar.ingestion_time_utc)})
+    return OhlcvBar(
+        **{
+            **bar.__dict__,
+            "timestamp_utc": ensure_utc(bar.timestamp_utc),
+            "ingestion_time_utc": ensure_utc(bar.ingestion_time_utc),
+        }
+    )
 
 
 def validate_corporate_action(event: CorporateAction) -> CorporateAction:
@@ -32,7 +38,13 @@ def validate_corporate_action(event: CorporateAction) -> CorporateAction:
     _validate_required_text(event.action_type, "action_type")
     _validate_required_text(event.source, "source")
     validate_confidence(event.confidence)
-    return CorporateAction(**{**event.__dict__, "timestamp_utc": ensure_utc(event.timestamp_utc), "ingestion_time_utc": ensure_utc(event.ingestion_time_utc)})
+    return CorporateAction(
+        **{
+            **event.__dict__,
+            "timestamp_utc": ensure_utc(event.timestamp_utc),
+            "ingestion_time_utc": ensure_utc(event.ingestion_time_utc),
+        }
+    )
 
 
 def validate_news_event(event: NewsEvent) -> NewsEvent:
@@ -42,7 +54,13 @@ def validate_news_event(event: NewsEvent) -> NewsEvent:
     _validate_required_text(event.language, "language")
     _validate_required_text(event.source, "source")
     validate_confidence(event.confidence)
-    return NewsEvent(**{**event.__dict__, "timestamp_utc": ensure_utc(event.timestamp_utc), "ingestion_time_utc": ensure_utc(event.ingestion_time_utc)})
+    return NewsEvent(
+        **{
+            **event.__dict__,
+            "timestamp_utc": ensure_utc(event.timestamp_utc),
+            "ingestion_time_utc": ensure_utc(event.ingestion_time_utc),
+        }
+    )
 
 
 def validate_embedding_payload(payload: EmbeddingPayload) -> EmbeddingPayload:
@@ -51,7 +69,13 @@ def validate_embedding_payload(payload: EmbeddingPayload) -> EmbeddingPayload:
     validate_confidence(payload.confidence)
     if not payload.vector:
         raise ValueError("vector is required")
-    return EmbeddingPayload(**{**payload.__dict__, "timestamp_utc": ensure_utc(payload.timestamp_utc), "ingestion_time_utc": ensure_utc(payload.ingestion_time_utc)})
+    return EmbeddingPayload(
+        **{
+            **payload.__dict__,
+            "timestamp_utc": ensure_utc(payload.timestamp_utc),
+            "ingestion_time_utc": ensure_utc(payload.ingestion_time_utc),
+        }
+    )
 
 
 def is_stale(timestamp_utc: datetime, max_age_seconds: int, now_utc: datetime) -> bool:

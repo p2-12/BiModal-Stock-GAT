@@ -34,7 +34,7 @@ class GoldenDatasetGenerator:
         }
 
         for ticker in sorted(cfg.tickers):
-            frame = price_frames[ticker].sort_index().loc[cfg.start_date:cfg.end_date].copy()
+            frame = price_frames[ticker].sort_index().loc[cfg.start_date : cfg.end_date].copy()
             file_path = version_dir / f"{ticker}.parquet"
             frame.to_parquet(file_path)
             manifest["files"][ticker] = {

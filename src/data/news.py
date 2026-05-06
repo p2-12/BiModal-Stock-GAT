@@ -19,7 +19,9 @@ from .contracts.validation import validate_news_event
 class NewsProvider(Protocol):
     name: str
 
-    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]: ...
+    def fetch(
+        self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[NewsEvent]: ...
 
 
 @dataclass
@@ -37,7 +39,9 @@ class OpenSourceNewsProvider:
     def __init__(self, cfg: NewsConfig):
         self.cfg = cfg
 
-    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+    def fetch(
+        self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[NewsEvent]:
         ds = load_dataset(self.cfg.dataset_name)
         df = ds["train"].to_pandas()
         df = df[[self.cfg.ticker_col, self.cfg.date_col, *self.cfg.text_cols]].dropna().copy()
@@ -66,14 +70,18 @@ class OpenSourceNewsProvider:
 class ScraperNewsProvider:
     name = "scraper"
 
-    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+    def fetch(
+        self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[NewsEvent]:
         return []
 
 
 class PaidApiNewsProvider:
     name = "paid_api"
 
-    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+    def fetch(
+        self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[NewsEvent]:
         return []
 
 
@@ -94,12 +102,23 @@ class NewsAggregator:
         for provider in self.providers:
             events.extend(provider.fetch(tickers, start_utc, end_utc))
 
-        filtered = [e for e in events if e.language.lower() == language.lower() and len(e.content.strip()) >= min_chars]
+        filtered = [
+            e
+            for e in events
+            if e.language.lower() == language.lower() and len(e.content.strip()) >= min_chars
+        ]
         dedup: dict[str, NewsEvent] = {}
         for event in filtered:
-            key = event.article_id or sha1(f"{event.ticker}|{event.headline.strip().lower()}|{event.timestamp_utc.isoformat()}".encode()).hexdigest()
+            key = (
+                event.article_id
+                or sha1(
+                    f"{event.ticker}|{event.headline.strip().lower()}|{event.timestamp_utc.isoformat()}".encode()
+                ).hexdigest()
+            )
             existing = dedup.get(key)
-            if existing is None or self.source_rank.get(event.source, 0) > self.source_rank.get(existing.source, 0):
+            if existing is None or self.source_rank.get(event.source, 0) > self.source_rank.get(
+                existing.source, 0
+            ):
                 dedup[key] = event
         return list(dedup.values())
 
@@ -109,12 +128,22 @@ class NewsIndex:
         self.lookback_days = lookback_days
         rows = []
         for e in events:
-            rows.append({"ticker": e.ticker, "date": pd.Timestamp(e.timestamp_utc).normalize(), "text": f"{e.headline}. {e.content}"})
+            rows.append(
+                {
+                    "ticker": e.ticker,
+                    "date": pd.Timestamp(e.timestamp_utc).normalize(),
+                    "text": f"{e.headline}. {e.content}",
+                }
+            )
         df = pd.DataFrame(rows)
         if df.empty:
             self.daily = pd.DataFrame(columns=["ticker", "date", "text"])
             return
-        daily = df.groupby(["ticker", "date"], sort=True)["text"].apply(lambda x: " ".join(x)).reset_index()
+        daily = (
+            df.groupby(["ticker", "date"], sort=True)["text"]
+            .apply(lambda x: " ".join(x))
+            .reset_index()
+        )
         self.daily = daily.set_index(["ticker", "date"]).sort_index()
 
     def get_window_text(self, ticker: str, date: pd.Timestamp) -> str:
@@ -122,14 +151,22 @@ class NewsIndex:
             return "[NO_NEWS]"
         date = pd.to_datetime(date).normalize()
         start = date - pd.Timedelta(days=self.lookback_days)
-        parts = [self.daily.loc[(ticker, d), "text"] for d in pd.date_range(start, date, freq="D") if (ticker, d) in self.daily.index]
+        parts = [
+            self.daily.loc[(ticker, d), "text"]
+            for d in pd.date_range(start, date, freq="D")
+            if (ticker, d) in self.daily.index
+        ]
         return " ".join(parts) if parts else "[NO_NEWS]"
 
 
 class FinBERTEmbedder:
     def __init__(self, model_name: str = "ProsusAI/finbert", device: str | None = None):
         if device is None:
-            device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+            device = (
+                "cuda"
+                if torch.cuda.is_available()
+                else ("mps" if torch.backends.mps.is_available() else "cpu")
+            )
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name)
@@ -137,10 +174,18 @@ class FinBERTEmbedder:
         self.model.eval()
 
     @torch.no_grad()
-    def encode_texts(self, texts: list[str], batch_size: int = 32, max_length: int = 256) -> np.ndarray:
+    def encode_texts(
+        self, texts: list[str], batch_size: int = 32, max_length: int = 256
+    ) -> np.ndarray:
         outs = []
         for i in tqdm(range(0, len(texts), batch_size), desc="FinBERT encode"):
-            enc = self.tokenizer(texts[i:i + batch_size], padding=True, truncation=True, max_length=max_length, return_tensors="pt").to(self.device)
+            enc = self.tokenizer(
+                texts[i : i + batch_size],
+                padding=True,
+                truncation=True,
+                max_length=max_length,
+                return_tensors="pt",
+            ).to(self.device)
             out = self.model(**enc).last_hidden_state
             outs.append(out[:, 0, :].detach().cpu().numpy())
         return np.concatenate(outs, axis=0)

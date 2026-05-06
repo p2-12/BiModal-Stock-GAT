@@ -20,7 +20,9 @@ def outlier_returns(close: pd.Series, z_thresh: float = 6.0) -> int:
     return int((z.abs() > z_thresh).sum())
 
 
-def feature_drift_vs_baseline(curr: pd.DataFrame, baseline: pd.DataFrame, thresh: float = 0.2) -> list[str]:
+def feature_drift_vs_baseline(
+    curr: pd.DataFrame, baseline: pd.DataFrame, thresh: float = 0.2
+) -> list[str]:
     drift = []
     for col in sorted(set(curr.columns).intersection(baseline.columns)):
         mu_curr = float(curr[col].mean())
@@ -32,6 +34,10 @@ def feature_drift_vs_baseline(curr: pd.DataFrame, baseline: pd.DataFrame, thresh
 
 
 def test_quality_functions_smoke():
-    df = pd.DataFrame({"headline": ["A", "a", "B"], "ts": ["2026-01-01", "2026-01-02", "2026-05-01"]})
+    df = pd.DataFrame(
+        {"headline": ["A", "a", "B"], "ts": ["2026-01-01", "2026-01-02", "2026-05-01"]}
+    )
     assert duplicate_headlines(df) == 1
-    assert stale_timestamps(df, "ts", max_age_days=20, now=pd.Timestamp("2026-05-06", tz="UTC")) >= 1
+    assert (
+        stale_timestamps(df, "ts", max_age_days=20, now=pd.Timestamp("2026-05-06", tz="UTC")) >= 1
+    )

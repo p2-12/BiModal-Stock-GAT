@@ -6,6 +6,7 @@ import torch.nn as nn
 
 class PriceLSTMEncoder(nn.Module):
     """Encode a [S, L, F] sequence into [S, H]."""
+
     def __init__(self, in_dim: int, hidden: int, dropout: float = 0.0):
         super().__init__()
         self.lstm = nn.LSTM(in_dim, hidden, num_layers=1, batch_first=True, bidirectional=False)
@@ -20,6 +21,7 @@ class PriceLSTMEncoder(nn.Module):
 
 class TextProjector(nn.Module):
     """Project fixed embeddings (e.g., FinBERT CLS) into fusion space."""
+
     def __init__(self, in_dim: int, out_dim: int, dropout: float = 0.0):
         super().__init__()
         self.net = nn.Sequential(

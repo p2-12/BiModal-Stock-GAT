@@ -13,10 +13,10 @@ from .graph_utils import corr_graph_topk
 
 @dataclass(frozen=True)
 class GraphArrays:
-    price: np.ndarray      # [T, S, L, F]
-    text: np.ndarray       # [T, S, D] (zeros if not used)
+    price: np.ndarray  # [T, S, L, F]
+    text: np.ndarray  # [T, S, D] (zeros if not used)
     text_mask: np.ndarray  # [T, S] bool
-    future_ret: np.ndarray # [T, S] or [T, S, H]
+    future_ret: np.ndarray  # [T, S] or [T, S, H]
     dates: list[str]
     tickers: list[str]
 
@@ -28,6 +28,7 @@ class GraphSnapshotDataset(Dataset):
     Graph edges are computed from the **past log-return window** in `price[..., 0]`
     if your feature 0 is Log_Ret (as in this scaffold).
     """
+
     def __init__(
         self,
         arrays: GraphArrays,
@@ -50,22 +51,23 @@ class GraphSnapshotDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Data:
         price = torch.tensor(self.arr.price[idx], dtype=torch.float32)  # [S,L,F]
-        text  = torch.tensor(self.arr.text[idx],  dtype=torch.float32)  # [S,D]
-        mask  = torch.tensor(self.arr.text_mask[idx].astype(np.float32), dtype=torch.float32)  # [S]
-        y_reg=torch.tensor(self.arr.future_ret[idx], dtype=torch.float32)  # [S] or [S,H]
+        text = torch.tensor(self.arr.text[idx], dtype=torch.float32)  # [S,D]
+        mask = torch.tensor(self.arr.text_mask[idx].astype(np.float32), dtype=torch.float32)  # [S]
+        y_reg = torch.tensor(self.arr.future_ret[idx], dtype=torch.float32)  # [S] or [S,H]
         if y_reg.ndim == 1:
             y = y_reg
             y_reg = y_reg.unsqueeze(-1)  # [S,1] for consistent regression code
         else:
             y = y_reg[:, -1].clone()  # default scalar label: last horizon
 
-
         # Build correlation graph from log returns (assumed feature 0) over the tail window.
         # returns_window: [S, W]
         L = price.shape[1]
         w = min(self.corr_window, L)
         returns_window = price[:, -w:, 0].cpu().numpy()
-        edge_index, edge_attr = corr_graph_topk(returns_window, topk=self.topk, use_abs=self.use_abs_corr)
+        edge_index, edge_attr = corr_graph_topk(
+            returns_window, topk=self.topk, use_abs=self.use_abs_corr
+        )
 
         data = Data(
             price=price,
@@ -91,6 +93,7 @@ def load_graph_arrays(path: str) -> GraphArrays:
         dates=list(npz["dates"].tolist()),
         tickers=list(npz["tickers"].tolist()),
     )
+
 
 def save_graph_arrays(path: str, arrays: GraphArrays) -> None:
     np.savez_compressed(
