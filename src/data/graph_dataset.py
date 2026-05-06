@@ -46,7 +46,7 @@ class GraphSnapshotDataset(Dataset):
         assert len(self.arr.dates) == self.arr.price.shape[0]
 
     def __len__(self) -> int:
-        return self.arr.price.shape[0]
+        return int(self.arr.price.shape[0])
 
     def __getitem__(self, idx: int) -> Data:
         price = torch.tensor(self.arr.price[idx], dtype=torch.float32)  # [S,L,F]

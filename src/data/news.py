@@ -12,7 +12,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
-from .contracts.schemas import NewsEvent
+from .contracts.schemas import NewsEvent, QualityFlag
 from .contracts.validation import validate_news_event
 
 
@@ -60,7 +60,7 @@ class OpenSourceNewsProvider:
                 source=self.name,
                 ingestion_time_utc=dt.datetime.now(dt.timezone.utc),
                 confidence=0.7,
-                quality_flag="estimated",
+                quality_flag=QualityFlag.ESTIMATED,
                 article_id=None,
             )
             events.append(validate_news_event(ev))

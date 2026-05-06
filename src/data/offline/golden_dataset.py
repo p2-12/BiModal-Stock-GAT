@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -24,16 +25,18 @@ class GoldenDatasetGenerator:
         version_dir = self.output_root / cfg.version
         version_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest = {
+        manifest: dict[str, Any] = {
             "version": cfg.version,
             "start_date": cfg.start_date,
             "end_date": cfg.end_date,
             "tickers": sorted(cfg.tickers),
             "files": {},
         }
+        start_ts = pd.Timestamp(cfg.start_date)
+        end_ts = pd.Timestamp(cfg.end_date)
 
         for ticker in sorted(cfg.tickers):
-            frame = price_frames[ticker].sort_index().loc[cfg.start_date : cfg.end_date].copy()
+            frame = price_frames[ticker].sort_index().loc[start_ts:end_ts].copy()
             file_path = version_dir / f"{ticker}.parquet"
             frame.to_parquet(file_path)
             manifest["files"][ticker] = {

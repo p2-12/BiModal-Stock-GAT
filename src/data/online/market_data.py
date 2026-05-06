@@ -7,7 +7,7 @@ from typing import Iterable, Protocol
 import pandas as pd
 import yfinance as yf
 
-from ..contracts.schemas import OhlcvBar
+from ..contracts.schemas import OhlcvBar, QualityFlag
 from ..contracts.validation import validate_ohlcv_bar
 
 
@@ -41,7 +41,7 @@ class YFinanceProvider:
                 source=self.name,
                 ingestion_time_utc=dt.datetime.now(dt.timezone.utc),
                 confidence=0.9,
-                quality_flag="verified",
+                quality_flag=QualityFlag.VERIFIED,
             )
             events.append(validate_ohlcv_bar(bar))
         return events

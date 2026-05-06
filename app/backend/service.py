@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import mlflow
 import numpy as np
+import pandas as pd
 
 from src.data.graph_dataset import GraphSnapshotDataset, load_graph_arrays
 from src.services.logging import get_logger, new_trace_id
@@ -19,7 +21,7 @@ class AppSettings:
 class AppService:
     def __init__(self, settings: AppSettings):
         self.settings = settings
-        self._dataset = None
+        self._dataset: GraphSnapshotDataset | None = None
         self._logger = get_logger("backend")
         mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
@@ -80,7 +82,9 @@ class AppService:
         exp = mlflow.get_experiment_by_name(experiment_name)
         if exp is None:
             return []
-        runs = mlflow.search_runs([exp.experiment_id], max_results=max_results)
+        runs: Any = mlflow.search_runs([exp.experiment_id], max_results=max_results)
+        if not isinstance(runs, pd.DataFrame):
+            return []
         return runs.fillna("").to_dict(orient="records")
 
     def live_monitor(self):
