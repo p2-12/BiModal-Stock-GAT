@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 
+
 class CorrWeightedGAT(nn.Module):
     """
     Correlation-weighted GAT over stocks.
@@ -20,6 +21,7 @@ class CorrWeightedGAT(nn.Module):
         edge_index:   [2, E]
         edge_attr:    [E, edge_attr_dim]
     """
+
     def __init__(
         self,
         price_encoder: nn.Module,
@@ -70,9 +72,9 @@ class CorrWeightedGAT(nn.Module):
         )
 
     def forward(self, price, text, text_mask, edge_index, edge_attr):
-        price_h = self.price_encoder(price)          # [S, Dp]
-        text_h  = self.text_proj(text)               # [S, D]
-        fused   = self.fusion(price_h, text_h, text_mask)  # [S, D]
+        price_h = self.price_encoder(price)  # [S, Dp]
+        text_h = self.text_proj(text)  # [S, D]
+        fused = self.fusion(price_h, text_h, text_mask)  # [S, D]
 
         g = self.pre(fused)
         for conv in self.convs:

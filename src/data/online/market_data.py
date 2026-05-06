@@ -7,21 +7,27 @@ from typing import Iterable, Protocol
 import pandas as pd
 import yfinance as yf
 
-from ..contracts.schemas import OhlcvBar
+from ..contracts.schemas import OhlcvBar, QualityFlag
 from ..contracts.validation import validate_ohlcv_bar
 
 
 class MarketDataProvider(Protocol):
     name: str
 
-    def fetch_bars(self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime) -> list[OhlcvBar]: ...
+    def fetch_bars(
+        self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[OhlcvBar]: ...
 
 
 class YFinanceProvider:
     name = "yfinance"
 
-    def fetch_bars(self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime) -> list[OhlcvBar]:
-        df = yf.download(ticker, start=start_utc.date(), end=end_utc.date(), progress=False, auto_adjust=False)
+    def fetch_bars(
+        self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[OhlcvBar]:
+        df = yf.download(
+            ticker, start=start_utc.date(), end=end_utc.date(), progress=False, auto_adjust=False
+        )
         events = []
         for idx, row in df.iterrows():
             bar = OhlcvBar(
@@ -35,19 +41,26 @@ class YFinanceProvider:
                 source=self.name,
                 ingestion_time_utc=dt.datetime.now(dt.timezone.utc),
                 confidence=0.9,
-                quality_flag="verified",
+                quality_flag=QualityFlag.VERIFIED,
             )
             events.append(validate_ohlcv_bar(bar))
         return events
 
 
 class MarketDataClient:
-    def __init__(self, providers: list[MarketDataProvider], max_retries: int = 3, rate_limit_seconds: float = 0.2):
+    def __init__(
+        self,
+        providers: list[MarketDataProvider],
+        max_retries: int = 3,
+        rate_limit_seconds: float = 0.2,
+    ):
         self.providers = providers
         self.max_retries = max_retries
         self.rate_limit_seconds = rate_limit_seconds
 
-    def fetch_with_failover(self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime) -> list[OhlcvBar]:
+    def fetch_with_failover(
+        self, ticker: str, start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> list[OhlcvBar]:
         last_error = None
         for provider in self.providers:
             for _ in range(self.max_retries):
@@ -62,5 +75,7 @@ class MarketDataClient:
             raise RuntimeError(f"all providers failed for {ticker}") from last_error
         return []
 
-    def backfill(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> dict[str, list[OhlcvBar]]:
+    def backfill(
+        self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime
+    ) -> dict[str, list[OhlcvBar]]:
         return {ticker: self.fetch_with_failover(ticker, start_utc, end_utc) for ticker in tickers}

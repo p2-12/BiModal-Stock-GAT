@@ -13,6 +13,7 @@ class GatedFusion(nn.Module):
 
     The gate is constrained to downweight text when mask=0.
     """
+
     def __init__(self, dim: int, dropout: float = 0.0):
         super().__init__()
         self.gate = nn.Sequential(
@@ -23,7 +24,9 @@ class GatedFusion(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, price_h: torch.Tensor, text_h: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, price_h: torch.Tensor, text_h: torch.Tensor, mask: torch.Tensor
+    ) -> torch.Tensor:
         if mask.dim() == 1:
             mask = mask.unsqueeze(-1)  # [S,1]
 

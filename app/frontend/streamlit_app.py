@@ -28,7 +28,10 @@ with tab1:
     date = st.text_input("Date (YYYY-MM-DD)", "2026-05-01")
     tickers = st.text_input("Ticker filter (comma-separated)", "")
     if st.button("Load Graph"):
-        resp = _post("/graph/snapshot", {"date": date, "tickers": [t.strip() for t in tickers.split(",") if t.strip()] or None})
+        resp = _post(
+            "/graph/snapshot",
+            {"date": date, "tickers": [t.strip() for t in tickers.split(",") if t.strip()] or None},
+        )
         nodes = pd.DataFrame(resp.get("nodes", []))
         edges = pd.DataFrame(resp.get("edges", []))
         if nodes.empty:
@@ -39,14 +42,32 @@ with tab1:
             for e in edges.itertuples():
                 x0, y0 = node_pos[e.source]
                 x1, y1 = node_pos[e.target]
-                fig.add_trace(go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines", line={"width": abs(e.corr) * 5 + 1, "color": "green" if e.corr > 0 else "red"}, hoverinfo="none"))
-            fig.add_trace(go.Scatter(
-                x=[node_pos[i][0] for i in nodes.id],
-                y=[node_pos[i][1] for i in nodes.id],
-                mode="markers+text",
-                text=nodes["ticker"],
-                marker={"size": 14, "color": nodes["confidence"], "colorscale": "Viridis", "showscale": True},
-            ))
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y0, y1],
+                        mode="lines",
+                        line={
+                            "width": abs(e.corr) * 5 + 1,
+                            "color": "green" if e.corr > 0 else "red",
+                        },
+                        hoverinfo="none",
+                    )
+                )
+            fig.add_trace(
+                go.Scatter(
+                    x=[node_pos[i][0] for i in nodes.id],
+                    y=[node_pos[i][1] for i in nodes.id],
+                    mode="markers+text",
+                    text=nodes["ticker"],
+                    marker={
+                        "size": 14,
+                        "color": nodes["confidence"],
+                        "colorscale": "Viridis",
+                        "showscale": True,
+                    },
+                )
+            )
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(nodes)
 

@@ -12,6 +12,7 @@ from sklearn.metrics import classification_report, mean_absolute_error, mean_squ
 
 from src.config import load_config
 from src.pipeline.common import build_model, load_dataset
+from src.services.logging import get_logger, new_trace_id
 from src.train.train_node import _collect_batch_outputs, make_time_splits, pick_device
 
 
@@ -24,6 +25,8 @@ def main():
     args = p.parse_args()
 
     cfg = load_config(args.config_dir)
+    logger = get_logger("evaluate")
+    run_trace_id = new_trace_id()
     dataset = load_dataset(args.dataset)
     out_dim = 3 if cfg.train.task == "classify" else 1
     model = build_model(cfg, out_dim=out_dim)
@@ -39,14 +42,27 @@ def main():
         raise ValueError("Specify --run-id or --model-uri")
 
     _, _, te_idx = make_time_splits(len(dataset))
-    te_loader = torch.utils.data.DataLoader([dataset[i] for i in te_idx], batch_size=cfg.train.batch_size)
+    te_loader = torch.utils.data.DataLoader(
+        [dataset[i] for i in te_idx], batch_size=cfg.train.batch_size
+    )
     device = pick_device()
-    y, y_reg, pred, probs = _collect_batch_outputs(model.to(device), te_loader, device, cfg.train.task)
+    y, y_reg, pred, probs = _collect_batch_outputs(
+        model.to(device), te_loader, device, cfg.train.task
+    )
+    logger.info(
+        "evaluation_outputs_collected",
+        extra={"run_trace_id": run_trace_id, "dataset_version": cfg.data.dataset_version},
+    )
 
     with mlflow.start_run(run_name="offline-eval"):
         if cfg.train.task == "classify":
             report = classification_report(y, pred, output_dict=True)
-            flat = {f"cls_{k}_{m}": v for k, d in report.items() if isinstance(d, dict) for m, v in d.items()}
+            flat = {
+                f"cls_{k}_{m}": v
+                for k, d in report.items()
+                if isinstance(d, dict)
+                for m, v in d.items()
+            }
             mlflow.log_metrics(flat)
 
             fig, ax = plt.subplots(figsize=(4, 4))

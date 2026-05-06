@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+
 def thresholds_from_train(train_future_ret: np.ndarray, mode: str = "std", k: float = 0.5):
     """Compute leakage-safe thresholds using TRAIN ONLY.
 
@@ -17,6 +18,7 @@ def thresholds_from_train(train_future_ret: np.ndarray, mode: str = "std", k: fl
         hi = float(np.quantile(r, 0.67))
         return (lo, hi)
     raise ValueError(f"Unknown mode: {mode}")
+
 
 def to_3class_labels(future_ret: np.ndarray, lo: float, hi: float) -> np.ndarray:
     y = np.zeros_like(future_ret, dtype=np.int64)
