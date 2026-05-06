@@ -1,21 +1,61 @@
 # Bimodal Correlation-Weighted GAT for Stock Movement Prediction
 
-This project scaffolds a **bimodal, per-day dynamic graph** model:
+## Training/Evaluation Pipeline
 
-- **Nodes**: stocks (tickers)
-- **Node features**:
-  - **Price**: a lookback window of technical features (e.g., log-returns, RSI, MACD)
-  - **Text**: a FinBERT-style embedding of aggregated news for that stock/date (optional)
-- **Edges**: learned relationships approximated by **rolling return correlation** computed *only from the past lookback window*
-- **Edge attributes**: (1) |corr|, (2) sign(corr)
-- **Model**: (Price encoder) + (Text projection/gating) -> **GATv2** with `edge_attr` -> per-node classifier/regressor
+This project now includes dedicated pipeline entrypoints in `src/pipeline/` and structured configs in `configs/`:
 
-## Scope / Next Steps
+- `configs/data.yaml`
+- `configs/model.yaml`
+- `configs/train.yaml`
 
-- **Still in progress**
-- Add ablations: no-text, no-graph, static-graph vs dynamic-graph.
-- Sweep `CORR_W` and `STRIDE`; correlation graphs are often unstable at short windows.
-- Hyperparameter tuning and alternative loss function
-- Persist metrics + plots (train/val curves, calibration, attention diagnostics).
-- Finally, a more robust analysis/evaluation of the model/results
+### 1) First training run
 
+```bash
+python -m src.pipeline.train \
+  --config-dir configs \
+  --dataset artifacts/graph_dataset.pt
+```
+
+### 2) Re-training run (new cut date + benchmark gate)
+
+```bash
+python -m src.pipeline.retrain \
+  --new-cut-date 2026-05-01 \
+  --backfill-days 120 \
+  --candidate-run-id <mlflow_run_id> \
+  --champion-model-name bimodal-stock-gat
+```
+
+### 3) Offline evaluation
+
+By run id:
+
+```bash
+python -m src.pipeline.evaluate \
+  --config-dir configs \
+  --dataset artifacts/graph_dataset.pt \
+  --run-id <mlflow_run_id>
+```
+
+By registry URI (name+stage):
+
+```bash
+python -m src.pipeline.evaluate \
+  --config-dir configs \
+  --dataset artifacts/graph_dataset.pt \
+  --model-uri models:/bimodal-stock-gat/Staging
+```
+
+### 4) Model promotion flow
+
+Register weights + signature:
+
+```bash
+python -m src.pipeline.register \
+  --config-dir configs \
+  --dataset artifacts/graph_dataset.pt \
+  --model-path artifacts/model.pt \
+  --name bimodal-stock-gat
+```
+
+Automatic promote-to-staging logic is handled by `src/pipeline/retrain.py`, which compares the candidate metric against the current production champion and only promotes on improvement.
