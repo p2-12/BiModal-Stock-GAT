@@ -1,0 +1,9 @@
+price_feat_dim: 5
+price_hidden: 64
+text_dim: 768
+fusion_dim: 128
+gat_hidden: 128
+gat_heads: 4
+gat_layers: 2
+dropout: 0.2
+edge_attr_dim: 2

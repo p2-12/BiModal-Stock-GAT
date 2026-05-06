@@ -1,0 +1,10 @@
+seed: 42
+lr: 0.0003
+weight_decay: 0.0001
+batch_size: 8
+epochs: 30
+patience: 8
+task: classify
+experiment_name: bimodal-stock-gat
+mlflow_tracking_uri: null
+run_name: null
