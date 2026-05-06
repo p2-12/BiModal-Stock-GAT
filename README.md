@@ -59,3 +59,25 @@ python -m src.pipeline.register \
 ```
 
 Automatic promote-to-staging logic is handled by `src/pipeline/retrain.py`, which compares the candidate metric against the current production champion and only promotes on improvement.
+
+## App package (FastAPI + Streamlit)
+
+A new `app/` package provides:
+- FastAPI backend for prediction, graph snapshots, MLflow metrics, and live monitor endpoints.
+- Streamlit frontend with 3 tabs:
+  1. Network View
+  2. Training & Evaluation
+  3. Live Inference Monitor
+
+### Local deployment
+
+Start everything (MLflow + API + UI + optional Postgres):
+
+```bash
+docker compose up --build
+```
+
+Services:
+- Streamlit UI: `http://localhost:8501`
+- FastAPI docs: `http://localhost:8000/docs`
+- MLflow server: `http://localhost:5000`
