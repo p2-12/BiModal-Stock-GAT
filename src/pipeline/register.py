@@ -26,16 +26,24 @@ def main():
 
     sample = dataset[0]
     with torch.no_grad():
-        out = model(sample.price, sample.text, sample.text_mask, sample.edge_index, sample.edge_attr)
+        out = model(
+            sample.price, sample.text, sample.text_mask, sample.edge_index, sample.edge_attr
+        )
     sig = infer_signature(sample.price.numpy(), out.numpy())
 
     with mlflow.start_run(run_name="register-model") as run:
         mlflow.log_artifact(args.model_path, "weights")
-        info = mlflow.pytorch.log_model(model, artifact_path="model", signature=sig, registered_model_name=args.name)
+        info = mlflow.pytorch.log_model(
+            model, artifact_path="model", signature=sig, registered_model_name=args.name
+        )
         mv = mlflow.register_model(info.model_uri, args.name)
         client = mlflow.tracking.MlflowClient()
-        client.set_model_version_tag(args.name, mv.version, "data_version", cfg.data.dataset_version)
-        client.set_model_version_tag(args.name, mv.version, "feature_schema_version", cfg.data.feature_schema_version)
+        client.set_model_version_tag(
+            args.name, mv.version, "data_version", cfg.data.dataset_version
+        )
+        client.set_model_version_tag(
+            args.name, mv.version, "feature_schema_version", cfg.data.feature_schema_version
+        )
         client.set_model_version_tag(args.name, mv.version, "label_mode", cfg.data.label_mode)
         print(run.info.run_id)
 

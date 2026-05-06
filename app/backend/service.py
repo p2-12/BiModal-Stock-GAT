@@ -7,6 +7,7 @@ import mlflow
 import numpy as np
 
 from src.data.graph_dataset import GraphSnapshotDataset, load_graph_arrays
+from src.services.logging import get_logger, new_trace_id
 
 
 @dataclass
@@ -19,6 +20,7 @@ class AppService:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self._dataset = None
+        self._logger = get_logger("backend")
         mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
 
     @property
@@ -41,7 +43,15 @@ class AppService:
             ret = float(data.y_reg[i, -1].item())
             conf = min(0.99, max(0.01, abs(ret) * 10.0))
             pred_class = 1 if ret > 0 else 0
-            nodes.append({"id": i, "ticker": t, "pred_class": pred_class, "pred_ret": ret, "confidence": conf})
+            nodes.append(
+                {
+                    "id": i,
+                    "ticker": t,
+                    "pred_class": pred_class,
+                    "pred_ret": ret,
+                    "confidence": conf,
+                }
+            )
 
         keep_ids = {n["id"] for n in nodes}
         edges = []
@@ -54,10 +64,17 @@ class AppService:
         return {"date": date, "nodes": nodes, "edges": edges}
 
     def predict(self, ticker: str, date: str):
+        trace_id = new_trace_id()
+        self._logger.info(
+            "prediction_requested",
+            extra={"prediction_trace_id": trace_id, "ticker": ticker, "date": date},
+        )
         snap = self.snapshot(date, [ticker])
         if not snap["nodes"]:
             raise ValueError("Ticker/date not found")
-        return snap["nodes"][0]
+        out = snap["nodes"][0]
+        out["prediction_trace_id"] = trace_id
+        return out
 
     def mlflow_runs(self, experiment_name: str = "Default", max_results: int = 20):
         exp = mlflow.get_experiment_by_name(experiment_name)

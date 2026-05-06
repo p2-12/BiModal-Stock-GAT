@@ -7,6 +7,7 @@ import mlflow
 
 from src.config import load_config
 from src.pipeline.common import build_model, current_git_commit, load_dataset
+from src.services.logging import get_logger, new_trace_id
 from src.train.train_node import set_seed, train_node_model
 
 
@@ -25,8 +26,14 @@ def main():
     out_dim = 3 if cfg.train.task == "classify" else 1
     model = build_model(cfg, out_dim=out_dim)
 
+    logger = get_logger("train")
+    run_trace_id = new_trace_id()
     set_seed(cfg.train.seed)
     with mlflow.start_run(run_name=cfg.train.run_name):
+        logger.info(
+            "training_start",
+            extra={"run_trace_id": run_trace_id, "dataset_version": cfg.data.dataset_version},
+        )
         mlflow.log_dict(cfg.to_dict(), "config/full_config.json")
         mlflow.log_text(json.dumps(cfg.to_dict(), indent=2), "config/full_config_pretty.json")
         mlflow.log_param("git_commit", current_git_commit())
@@ -45,10 +52,15 @@ def main():
             patience=cfg.train.patience,
             label_mode=cfg.data.label_mode,
             threshold_k=cfg.data.threshold_k,
+            logger=logger,
         )
+        logger.info("training_complete", extra={"run_trace_id": run_trace_id})
         mlflow.log_metrics({"best_val_loss": min(result.history["val_loss"])})
         mlflow.log_dict(result.history, "metrics/history.json")
-        mlflow.log_dict({"splits": [s.tolist() for s in splits], "thresholds": thresholds}, "artifacts/splits_thresholds.json")
+        mlflow.log_dict(
+            {"splits": [s.tolist() for s in splits], "thresholds": thresholds},
+            "artifacts/splits_thresholds.json",
+        )
 
 
 if __name__ == "__main__":
