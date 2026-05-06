@@ -8,3 +8,9 @@ torch_geometric
 transformers
 datasets
 joblib
+fastapi
+uvicorn
+streamlit
+plotly
+requests
+mlflow
