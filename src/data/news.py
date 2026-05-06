@@ -2,14 +2,24 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass
-from typing import Dict, Iterable, Optional, Tuple
+from hashlib import sha1
+from typing import Iterable, Protocol, Tuple
 
 import numpy as np
 import pandas as pd
-from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModel
 import torch
+from datasets import load_dataset
 from tqdm import tqdm
+from transformers import AutoModel, AutoTokenizer
+
+from .contracts.schemas import NewsEvent
+from .contracts.validation import validate_news_event
+
+
+class NewsProvider(Protocol):
+    name: str
+
+    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]: ...
 
 
 @dataclass
@@ -20,59 +30,104 @@ class NewsConfig:
     date_col: str = "exact_trading_date"
     lookback_days: int = 3
 
-class NewsIndex:
-    """Loads news rows and exposes fast (ticker, date) -> aggregated text.
 
-    Design note:
-    - We aggregate first to daily text, then build per-day rolling windows in `get_window_text`.
-    """
-    def __init__(self, tickers: Iterable[str], cfg: NewsConfig):
+class OpenSourceNewsProvider:
+    name = "opensource_dataset"
+
+    def __init__(self, cfg: NewsConfig):
         self.cfg = cfg
-        ds = load_dataset(cfg.dataset_name)
+
+    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+        ds = load_dataset(self.cfg.dataset_name)
         df = ds["train"].to_pandas()
+        df = df[[self.cfg.ticker_col, self.cfg.date_col, *self.cfg.text_cols]].dropna().copy()
+        df.rename(columns={self.cfg.ticker_col: "ticker", self.cfg.date_col: "date"}, inplace=True)
+        df["date"] = pd.to_datetime(df["date"], utc=True)
+        df = df[df["ticker"].isin(list(tickers))]
+        df = df[(df["date"] >= pd.Timestamp(start_utc)) & (df["date"] <= pd.Timestamp(end_utc))]
+        events = []
+        for row in df.itertuples(index=False):
+            ev = NewsEvent(
+                ticker=row.ticker,
+                timestamp_utc=row.date.to_pydatetime(),
+                headline=getattr(row, self.cfg.text_cols[0]),
+                content=getattr(row, self.cfg.text_cols[1]),
+                language="en",
+                source=self.name,
+                ingestion_time_utc=dt.datetime.now(dt.timezone.utc),
+                confidence=0.7,
+                quality_flag="estimated",
+                article_id=None,
+            )
+            events.append(validate_news_event(ev))
+        return events
 
-        df = df[[cfg.ticker_col, cfg.date_col, *cfg.text_cols]].dropna().copy()
-        df.rename(columns={cfg.ticker_col: "ticker", cfg.date_col: "date"}, inplace=True)
-        df["ticker"] = df["ticker"].astype(str)
-        df["date"] = pd.to_datetime(df["date"]).dt.normalize()
 
-        df = df[df["ticker"].isin(list(tickers))].copy()
+class ScraperNewsProvider:
+    name = "scraper"
+
+    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+        return []
+
+
+class PaidApiNewsProvider:
+    name = "paid_api"
+
+    def fetch(self, tickers: Iterable[str], start_utc: dt.datetime, end_utc: dt.datetime) -> list[NewsEvent]:
+        return []
+
+
+class NewsAggregator:
+    def __init__(self, providers: list[NewsProvider], source_rank: dict[str, int] | None = None):
+        self.providers = providers
+        self.source_rank = source_rank or {"paid_api": 3, "scraper": 2, "opensource_dataset": 1}
+
+    def fetch_filtered(
+        self,
+        tickers: Iterable[str],
+        start_utc: dt.datetime,
+        end_utc: dt.datetime,
+        language: str = "en",
+        min_chars: int = 40,
+    ) -> list[NewsEvent]:
+        events = []
+        for provider in self.providers:
+            events.extend(provider.fetch(tickers, start_utc, end_utc))
+
+        filtered = [e for e in events if e.language.lower() == language.lower() and len(e.content.strip()) >= min_chars]
+        dedup: dict[str, NewsEvent] = {}
+        for event in filtered:
+            key = event.article_id or sha1(f"{event.ticker}|{event.headline.strip().lower()}|{event.timestamp_utc.isoformat()}".encode()).hexdigest()
+            existing = dedup.get(key)
+            if existing is None or self.source_rank.get(event.source, 0) > self.source_rank.get(existing.source, 0):
+                dedup[key] = event
+        return list(dedup.values())
+
+
+class NewsIndex:
+    def __init__(self, events: Iterable[NewsEvent], lookback_days: int = 3):
+        self.lookback_days = lookback_days
+        rows = []
+        for e in events:
+            rows.append({"ticker": e.ticker, "date": pd.Timestamp(e.timestamp_utc).normalize(), "text": f"{e.headline}. {e.content}"})
+        df = pd.DataFrame(rows)
         if df.empty:
             self.daily = pd.DataFrame(columns=["ticker", "date", "text"])
             return
-
-        df["text"] = df[cfg.text_cols[0]].fillna("") + ". " + df[cfg.text_cols[1]].fillna("")
         daily = df.groupby(["ticker", "date"], sort=True)["text"].apply(lambda x: " ".join(x)).reset_index()
-
-        # store as a MultiIndex series for fast lookup
         self.daily = daily.set_index(["ticker", "date"]).sort_index()
 
     def get_window_text(self, ticker: str, date: pd.Timestamp) -> str:
-        """Aggregate text in [date - lookback_days, date] inclusive."""
         if self.daily.empty:
             return "[NO_NEWS]"
-
         date = pd.to_datetime(date).normalize()
-        start = date - pd.Timedelta(days=self.cfg.lookback_days)
-        # Collect by iterating days; this is fast enough for small lookback_days.
-        parts = []
-        for d in pd.date_range(start, date, freq="D"):
-            key = (ticker, d.normalize())
-            if key in self.daily.index:
-                parts.append(self.daily.loc[key, "text"])
-        if not parts:
-            return "[NO_NEWS]"
-        # newest first is optional; keep chronological by default for readability
-        return " ".join(parts)
+        start = date - pd.Timedelta(days=self.lookback_days)
+        parts = [self.daily.loc[(ticker, d), "text"] for d in pd.date_range(start, date, freq="D") if (ticker, d) in self.daily.index]
+        return " ".join(parts) if parts else "[NO_NEWS]"
 
 
 class FinBERTEmbedder:
-    """Minimal embedder to turn aggregated text into a single vector.
-
-    This uses the [CLS] token from the final hidden state, with mean pooling as a fallback.
-    Intended for *precomputation* (not in-training) to keep experiments tractable.
-    """
-    def __init__(self, model_name: str = "ProsusAI/finbert", device: Optional[str] = None):
+    def __init__(self, model_name: str = "ProsusAI/finbert", device: str | None = None):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
         self.device = device
@@ -85,15 +140,7 @@ class FinBERTEmbedder:
     def encode_texts(self, texts: list[str], batch_size: int = 32, max_length: int = 256) -> np.ndarray:
         outs = []
         for i in tqdm(range(0, len(texts), batch_size), desc="FinBERT encode"):
-            batch = texts[i:i+batch_size]
-            enc = self.tokenizer(
-                batch,
-                padding=True,
-                truncation=True,
-                max_length=max_length,
-                return_tensors="pt",
-            ).to(self.device)
-            out = self.model(**enc).last_hidden_state  # [B, T, H]
-            cls = out[:, 0, :]  # [B, H]
-            outs.append(cls.detach().cpu().numpy())
+            enc = self.tokenizer(texts[i:i + batch_size], padding=True, truncation=True, max_length=max_length, return_tensors="pt").to(self.device)
+            out = self.model(**enc).last_hidden_state
+            outs.append(out[:, 0, :].detach().cpu().numpy())
         return np.concatenate(outs, axis=0)
