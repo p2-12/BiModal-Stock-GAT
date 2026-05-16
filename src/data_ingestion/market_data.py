@@ -12,7 +12,9 @@ def load_watchlist(path: str | Path) -> list[str]:
     return [symbol for symbol in symbols if symbol and not symbol.startswith("#")]
 
 
-def fetch_watchlist_prices(symbols: list[str], period: str = "1y", interval: str = "1d") -> pd.DataFrame:
+def fetch_watchlist_prices(
+    symbols: list[str], period: str = "1y", interval: str = "1d"
+) -> pd.DataFrame:
     """Download OHLCV history for all symbols using yfinance."""
     if not symbols:
         return pd.DataFrame()
