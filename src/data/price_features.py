@@ -31,6 +31,36 @@ FEATURE_COLS = [
     "MKT_Trend_60",
     "MKT_Drawdown_126",
     "MKT_RelVol_20_126",
+    "SMA_20_50_Ratio",
+    "SMA_50_200_Ratio",
+    "RSI_14_Norm",
+    "Mom_5",
+    "Mom_21",
+    "Mom_63",
+    "ATR_Pct_14",
+    "Volatility_21",
+    "Rev_Growth_YoY",
+    "EPS_Growth_YoY",
+    "Gross_Margin",
+    "Operating_Margin",
+    "Debt_To_Equity",
+    "PE_Ratio",
+    "Analyst_Rating_Norm",
+    "Analyst_Revision_3M",
+    "SPY_Trend_State",
+    "QQQ_Trend_State",
+    "VIX_Regime",
+    "Sector_Bucket",
+    "Industry_Bucket",
+    "Style_Bucket",
+]
+
+LEGACY_DEBUG_COLS = [
+    "legacy_rsi_overbought",
+    "legacy_rsi_oversold",
+    "legacy_momentum_hot",
+    "legacy_volatility_high",
+    "legacy_vix_panic",
 ]
 
 
@@ -67,7 +97,13 @@ def compute_regime_features(market_df):
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def engineer_features(df, regime_df=None):
+def engineer_features(
+    df,
+    regime_df=None,
+    fundamentals: dict | None = None,
+    market_context: dict | None = None,
+    categoricals: dict | None = None,
+):
     """
     Create per-ticker OHLCV features and optionally join market regime features.
 
@@ -91,6 +127,9 @@ def engineer_features(df, regime_df=None):
     df["Log_Ret_10"] = np.log(close / close.shift(10))
     df["Mom_20"] = close / close.shift(20) - 1.0
     df["Mom_60"] = close / close.shift(60) - 1.0
+    df["Mom_5"] = close / close.shift(5) - 1.0
+    df["Mom_21"] = close / close.shift(21) - 1.0
+    df["Mom_63"] = close / close.shift(63) - 1.0
 
     # volatility
     r = df["Log_Ret_1"]
@@ -123,6 +162,7 @@ def engineer_features(df, regime_df=None):
     tr3 = (low - prev_close).abs()
     df["TrueRange"] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     df["ATR_14"] = df["TrueRange"].rolling(14).mean()
+    df["ATR_Pct_14"] = df["ATR_14"] / (close + 1e-12)
     df["HL_Range"] = (high - low) / (close + 1e-12)
     df["OC_Range"] = (close - open_) / (open_ + 1e-12)
 
@@ -137,6 +177,7 @@ def engineer_features(df, regime_df=None):
     loss = (-delta.where(delta < 0.0, 0.0)).rolling(14).mean()
     rs = gain / (loss + 1e-12)
     df["RSI_14"] = 100.0 - (100.0 / (1.0 + rs))
+    df["RSI_14_Norm"] = (df["RSI_14"] - 50.0) / 50.0
 
     # stochastic
     low_14 = low.rolling(14).min()
@@ -146,13 +187,47 @@ def engineer_features(df, regime_df=None):
 
     # Bollinger position
     df["BB_Pos_20"] = (close - (ma_20 - 2.0 * sd_20)) / (4.0 * sd_20 + 1e-12)
+    sma_20 = close.rolling(20).mean()
+    sma_50 = close.rolling(50).mean()
+    sma_200 = close.rolling(200).mean()
+    df["SMA_20_50_Ratio"] = sma_20 / (sma_50 + 1e-12) - 1.0
+    df["SMA_50_200_Ratio"] = sma_50 / (sma_200 + 1e-12) - 1.0
+    df["Volatility_21"] = r.rolling(21).std() * np.sqrt(252.0)
+
+    fundamentals = fundamentals or {}
+    market_context = market_context or {}
+    categoricals = categoricals or {}
+
+    df["Rev_Growth_YoY"] = float(fundamentals.get("rev_growth_yoy", 0.0))
+    df["EPS_Growth_YoY"] = float(fundamentals.get("eps_growth_yoy", 0.0))
+    df["Gross_Margin"] = float(fundamentals.get("gross_margin", 0.0))
+    df["Operating_Margin"] = float(fundamentals.get("operating_margin", 0.0))
+    df["Debt_To_Equity"] = float(fundamentals.get("debt_to_equity", 0.0))
+    df["PE_Ratio"] = float(fundamentals.get("pe_ratio", 0.0))
+    df["Analyst_Rating_Norm"] = float(fundamentals.get("analyst_rating_norm", 0.0))
+    df["Analyst_Revision_3M"] = float(fundamentals.get("analyst_revision_3m", 0.0))
+
+    df["SPY_Trend_State"] = float(market_context.get("spy_trend_state", 0.0))
+    df["QQQ_Trend_State"] = float(market_context.get("qqq_trend_state", 0.0))
+    df["VIX_Regime"] = float(market_context.get("vix_regime", 0.0))
+
+    df["Sector_Bucket"] = float(categoricals.get("sector_bucket", 0.0))
+    df["Industry_Bucket"] = float(categoricals.get("industry_bucket", 0.0))
+    df["Style_Bucket"] = float(categoricals.get("style_bucket", 0.0))
+
+    # temporary migration helpers for side-by-side comparison
+    df["legacy_rsi_overbought"] = (df["RSI_14"] > 70.0).astype(float)
+    df["legacy_rsi_oversold"] = (df["RSI_14"] < 30.0).astype(float)
+    df["legacy_momentum_hot"] = (df["Mom_20"] > 0.05).astype(float)
+    df["legacy_volatility_high"] = (df["RV_20"] > df["RV_60"]).astype(float)
+    df["legacy_vix_panic"] = (df["VIX_Regime"] >= 2.0).astype(float)
 
     # Join regime features (market-wide)
     if regime_df is not None:
         df = df.join(regime_df, how="left")
         df = df.ffill()
 
-    keep = ["Close"] + [c for c in FEATURE_COLS if c in df.columns]
+    keep = ["Close"] + [c for c in FEATURE_COLS if c in df.columns] + LEGACY_DEBUG_COLS
     df = df[keep].replace([np.inf, -np.inf], np.nan).dropna()
     return df
 
