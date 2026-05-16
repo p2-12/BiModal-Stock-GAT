@@ -1,21 +1,26 @@
-import sys
 import types
 
 import numpy as np
 import pandas as pd
 
-sys.modules.setdefault("defeatbeta_api", types.ModuleType("defeatbeta_api"))
-sys.modules.setdefault("defeatbeta_api.data", types.ModuleType("defeatbeta_api.data"))
-ticker_mod = types.ModuleType("defeatbeta_api.data.ticker")
-ticker_mod.Ticker = object
-sys.modules.setdefault("defeatbeta_api.data.ticker", ticker_mod)
 
-from src.data import build_arrays
-from src.data.graph_dataset import GraphArrays, load_graph_arrays, save_graph_arrays
-from src.data.price_features import FEATURE_COLS
+def _import_build_arrays_with_stub():
+    import sys
+
+    sys.modules.setdefault("defeatbeta_api", types.ModuleType("defeatbeta_api"))
+    sys.modules.setdefault("defeatbeta_api.data", types.ModuleType("defeatbeta_api.data"))
+    ticker_mod = types.ModuleType("defeatbeta_api.data.ticker")
+    ticker_mod.Ticker = object
+    sys.modules.setdefault("defeatbeta_api.data.ticker", ticker_mod)
+
+    from src.data import build_arrays
+
+    return build_arrays
 
 
 def test_graph_arrays_persist_eligibility_masks(tmp_path):
+    from src.data.graph_dataset import GraphArrays, load_graph_arrays, save_graph_arrays
+
     arr = GraphArrays(
         price=np.zeros((2, 1, 3, 2), dtype=np.float32),
         text=np.zeros((2, 1, 4), dtype=np.float32),
@@ -39,6 +44,9 @@ def test_graph_arrays_persist_eligibility_masks(tmp_path):
 
 
 def test_build_graph_arrays_applies_historical_eligibility(monkeypatch):
+    build_arrays = _import_build_arrays_with_stub()
+    from src.data.price_features import FEATURE_COLS
+
     dates = pd.to_datetime(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"])
     feat = pd.DataFrame({c: [0.1, 0.2, 0.3, 0.4] for c in FEATURE_COLS}, index=dates)
     feat["Close"] = [10.0, 2.0, 10.0, 10.0]
