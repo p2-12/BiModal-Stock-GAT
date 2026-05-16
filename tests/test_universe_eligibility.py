@@ -53,7 +53,9 @@ def test_build_graph_arrays_applies_historical_eligibility(monkeypatch):
         )
     }
 
-    monkeypatch.setattr(build_arrays, "build_aligned_feature_panel", lambda *a, **k: (dates, {"AAA": feat}))
+    monkeypatch.setattr(
+        build_arrays, "build_aligned_feature_panel", lambda *a, **k: (dates, {"AAA": feat})
+    )
     monkeypatch.setattr(build_arrays, "to_per_ticker_frames", lambda *a, **k: per)
     monkeypatch.setattr(build_arrays, "download_prices", lambda *a, **k: None)
 

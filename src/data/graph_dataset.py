@@ -100,9 +100,17 @@ def load_graph_arrays(path: str) -> GraphArrays:
         tickers=list(npz["tickers"].tolist()),
         eligibility_mask=eligibility_mask,
         unavailable_mask=unavailable_mask,
-        eligibility_liquidity=(float(npz["eligibility_liquidity"]) if "eligibility_liquidity" in npz else None),
-        eligibility_price_floor=(float(npz["eligibility_price_floor"]) if "eligibility_price_floor" in npz else None),
-        eligibility_market_cap_floor=(float(npz["eligibility_market_cap_floor"]) if "eligibility_market_cap_floor" in npz else None),
+        eligibility_liquidity=(
+            float(npz["eligibility_liquidity"]) if "eligibility_liquidity" in npz else None
+        ),
+        eligibility_price_floor=(
+            float(npz["eligibility_price_floor"]) if "eligibility_price_floor" in npz else None
+        ),
+        eligibility_market_cap_floor=(
+            float(npz["eligibility_market_cap_floor"])
+            if "eligibility_market_cap_floor" in npz
+            else None
+        ),
     )
 
 
