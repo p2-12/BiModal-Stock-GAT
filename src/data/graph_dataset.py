@@ -18,6 +18,11 @@ class GraphArrays:
     future_ret: np.ndarray  # [T, S] or [T, S, H]
     dates: list[str]
     tickers: list[str]
+    eligibility_mask: np.ndarray | None = None  # [T, S] bool
+    unavailable_mask: np.ndarray | None = None  # [T, S] bool
+    eligibility_liquidity: float | None = None
+    eligibility_price_floor: float | None = None
+    eligibility_market_cap_floor: float | None = None
 
 
 class GraphSnapshotDataset(Dataset):
@@ -84,6 +89,8 @@ class GraphSnapshotDataset(Dataset):
 
 def load_graph_arrays(path: str) -> GraphArrays:
     npz = np.load(path, allow_pickle=True)
+    eligibility_mask = npz["eligibility_mask"].astype(bool) if "eligibility_mask" in npz else None
+    unavailable_mask = npz["unavailable_mask"].astype(bool) if "unavailable_mask" in npz else None
     return GraphArrays(
         price=npz["price"].astype(np.float32),
         text=npz["text"].astype(np.float32),
@@ -91,12 +98,16 @@ def load_graph_arrays(path: str) -> GraphArrays:
         future_ret=npz["future_ret"].astype(np.float32),
         dates=list(npz["dates"].tolist()),
         tickers=list(npz["tickers"].tolist()),
+        eligibility_mask=eligibility_mask,
+        unavailable_mask=unavailable_mask,
+        eligibility_liquidity=(float(npz["eligibility_liquidity"]) if "eligibility_liquidity" in npz else None),
+        eligibility_price_floor=(float(npz["eligibility_price_floor"]) if "eligibility_price_floor" in npz else None),
+        eligibility_market_cap_floor=(float(npz["eligibility_market_cap_floor"]) if "eligibility_market_cap_floor" in npz else None),
     )
 
 
 def save_graph_arrays(path: str, arrays: GraphArrays) -> None:
-    np.savez_compressed(
-        path,
+    payload = dict(
         price=arrays.price.astype(np.float32),
         text=arrays.text.astype(np.float32),
         mask=arrays.text_mask.astype(bool),
@@ -104,3 +115,14 @@ def save_graph_arrays(path: str, arrays: GraphArrays) -> None:
         dates=np.array(arrays.dates, dtype=object),
         tickers=np.array(arrays.tickers, dtype=object),
     )
+    if arrays.eligibility_mask is not None:
+        payload["eligibility_mask"] = arrays.eligibility_mask.astype(bool)
+    if arrays.unavailable_mask is not None:
+        payload["unavailable_mask"] = arrays.unavailable_mask.astype(bool)
+    if arrays.eligibility_liquidity is not None:
+        payload["eligibility_liquidity"] = float(arrays.eligibility_liquidity)
+    if arrays.eligibility_price_floor is not None:
+        payload["eligibility_price_floor"] = float(arrays.eligibility_price_floor)
+    if arrays.eligibility_market_cap_floor is not None:
+        payload["eligibility_market_cap_floor"] = float(arrays.eligibility_market_cap_floor)
+    np.savez_compressed(path, **payload)

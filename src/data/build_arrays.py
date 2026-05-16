@@ -57,7 +57,17 @@ def _defeatbeta_price_one(ticker, start, end, max_retries, base_sleep, jitter):
                 if k not in df.columns:
                     raise RuntimeError(f"Missing {k} for {ticker}")
 
-            out = df[["report_date", "open", "high", "low", "close", "volume"]].rename(columns=ren)
+            cols = ["report_date", "open", "high", "low", "close", "volume"]
+            extra_cap_col = None
+            for candidate in ("market_cap", "marketCap", "mkt_cap"):
+                if candidate in df.columns:
+                    cols.append(candidate)
+                    extra_cap_col = candidate
+                    break
+
+            out = df[cols].rename(columns=ren)
+            if extra_cap_col is not None:
+                out = out.rename(columns={extra_cap_col: "MarketCap"})
             out = out.drop_duplicates(subset=["report_date"]).sort_values("report_date")
             out = out.set_index("report_date")
             out = out.replace([np.inf, -np.inf], np.nan).ffill().bfill()
@@ -290,6 +300,9 @@ def build_graph_arrays(
     finbert_model="ProsusAI/finbert",
     cache_prices=None,
     max_text_length=256,
+    eligibility_liquidity=0.0,
+    eligibility_price_floor=0.0,
+    eligibility_market_cap_floor=0.0,
 ):
     """
     Create arrays for dynamic-graph snapshots aligned by date.
@@ -303,6 +316,8 @@ def build_graph_arrays(
       - tickers:    list[str] (may be reduced only if some tickers truly have no usable data)
     """
     dates, feats = build_aligned_feature_panel(tickers, start, end, cache_prices=cache_prices)
+    raw = download_prices(tickers, start, end, cache_path=cache_prices, auto_adjust=True)
+    per = to_per_ticker_frames(raw, tickers)
 
     # Use only tickers that actually produced features
     tickers_used = [t for t in tickers if t in feats]
@@ -329,6 +344,8 @@ def build_graph_arrays(
 
     price_arr = np.zeros((len(idxs), S, lookback, F), dtype=np.float32)
     ret_arr = np.zeros((len(idxs), S, horizon), dtype=np.float32)
+    eligibility_mask = np.zeros((len(idxs), S), dtype=bool)
+    unavailable_mask = np.zeros((len(idxs), S), dtype=bool)
 
     for ti, tkr in enumerate(tickers_used):
         f = feats[tkr]
@@ -343,6 +360,38 @@ def build_graph_arrays(
         for si, i in enumerate(idxs):
             price_arr[si, ti] = X[i - lookback : i, :]
             ret_arr[si, ti, :] = rcurve[i, :]
+
+            row = per[tkr].reindex([dates[i]])
+            if row.empty:
+                unavailable_mask[si, ti] = True
+                continue
+
+            close = float(row["Close"].iloc[0]) if "Close" in row.columns else np.nan
+            volume = float(row["Volume"].iloc[0]) if "Volume" in row.columns else np.nan
+            liquidity = close * volume if np.isfinite(close) and np.isfinite(volume) else np.nan
+            market_cap = (
+                float(row["MarketCap"].iloc[0])
+                if "MarketCap" in row.columns and pd.notna(row["MarketCap"].iloc[0])
+                else np.nan
+            )
+            if not np.isfinite(close) or not np.isfinite(volume):
+                unavailable_mask[si, ti] = True
+
+            eligible = (
+                np.isfinite(close)
+                and np.isfinite(liquidity)
+                and close >= eligibility_price_floor
+                and liquidity >= eligibility_liquidity
+                and (
+                    eligibility_market_cap_floor <= 0
+                    or (np.isfinite(market_cap) and market_cap >= eligibility_market_cap_floor)
+                )
+            )
+            eligibility_mask[si, ti] = bool(eligible)
+
+    # Backtests must only use known/eligible symbols on each historical date.
+    price_arr[~eligibility_mask] = 0.0
+    ret_arr[~eligibility_mask] = 0.0
 
     # Optional news
     D_text = 768
@@ -383,4 +432,9 @@ def build_graph_arrays(
         future_ret=ret_arr,
         dates=[dates[i].strftime("%Y-%m-%d") for i in idxs],
         tickers=tickers_used,
+        eligibility_mask=eligibility_mask,
+        unavailable_mask=unavailable_mask,
+        eligibility_liquidity=eligibility_liquidity,
+        eligibility_price_floor=eligibility_price_floor,
+        eligibility_market_cap_floor=eligibility_market_cap_floor,
     )
