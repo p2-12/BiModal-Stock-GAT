@@ -1,4 +1,4 @@
-# WIP - Bimodal Correlation-Weighted GAT for Stock Movement Prediction
+# WIP - Bimodal Correlation-Weighted Graph Attention Network for Stock Movement Prediction
 
 ## Training/Evaluation Pipeline
 
